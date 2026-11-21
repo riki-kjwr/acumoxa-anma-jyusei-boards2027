@@ -110,3 +110,10 @@ test('pilot previews and sends precisely the same 20 rows twice without checkpoi
   assert.throws(() => sandbox.syncMultiSourceV3Pilot20(), /重複ID/);
   assert.equal(posts.length, 2);
 });
+
+test('review warnings cannot turn provisional answers into verified questions', () => {
+  for (const status of ['推定正答・本文要照合','正答要確認・本文要照合','模範解答照合済・本文要確認','本文要照合']) {
+    assert.equal(sandbox.v3AutoVerified_(status), false);
+  }
+  assert.equal(sandbox.v3AutoVerified_('模範解答照合済'), true);
+});
