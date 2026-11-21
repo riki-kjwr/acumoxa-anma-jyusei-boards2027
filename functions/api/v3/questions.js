@@ -1,6 +1,10 @@
 // Read-only V3 API. The legacy /api/questions endpoint is untouched.
 // Pagination is keyset-based so large banks do not load into one response.
 export async function onRequestGet({ request, env }) {
+  if (!env.SYNC_TOKEN) return reply({ error: "Missing SYNC_TOKEN" }, 503);
+  if (request.headers.get("Authorization") !== "Bearer " + env.SYNC_TOKEN) {
+    return reply({ error: "Unauthorized" }, 401);
+  }
   if (!env.DB) return reply({ error: "D1 database binding DB is missing" }, 503);
   const params = new URL(request.url).searchParams;
   const requested = Number(params.get("limit") || 20);
