@@ -244,7 +244,7 @@ function v3AutoSubject_(src,name) {
   return name;
 }
 function v3AutoVerified_(status) {
-  if (/(未確認|未照合|要確認|要再確認|再確認|照合待ち|確認待ち|不明|暫定|仮|保留)/.test(status)) return false;
+  if (/(未確認|未照合|要確認|要照合|要再確認|再確認|照合待ち|確認待ち|不明|暫定|推定|仮|保留)/.test(status)) return false;
   return /(照合|確認|確定)/.test(status);
 }
 function v3AutoMap_(src,sheet,get) {
