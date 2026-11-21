@@ -56,3 +56,57 @@ test('approved spreadsheet question tabs are discovered using headers', () => {
   assert.equal(sandbox.v3AutoIsQuestionTab_(src, headers), true);
   assert.equal(sandbox.v3AutoIsQuestionTab_(src, {'問題ID':0}), false);
 });
+
+test('pilot previews and sends precisely the same 20 rows twice without checkpoints', () => {
+  const labels = runInContext('D1_V3_AUTO_REQUIRED.grad', sandbox);
+  const rows = Array.from({length:20}, (_, i) => labels.map((label) => ({
+    '問題ID':'PILOT-' + i, '問番号':i + 1, '問題文（原文）':'Question',
+    '選択肢1（原文）':'A', '選択肢2（原文）':'B', '選択肢3（原文）':'C',
+    '選択肢4（原文）':'D', '正答番号':1
+  })[label] ?? ''));
+  const posts = [];
+  const messages = [];
+  let released = false;
+  const pilotSheet = {
+    getSheetId:() => 0, getName:() => '問題マスター１（R7）',
+    getLastRow:() => 1000, getLastColumn:() => labels.length,
+    getRange(start, column, count, width) {
+      assert.equal(column, 1);
+      assert.equal(width, labels.length);
+      if (start === 1 && count === 1) return {getDisplayValues:() => [labels]};
+      assert.deepEqual([start, count], [2, 20]);
+      return {getValues:() => rows};
+    }
+  };
+  sandbox.SpreadsheetApp = {openById:() => ({getSheetById:() => pilotSheet})};
+  sandbox.Logger = {log:(entry) => messages.push(JSON.parse(entry))};
+  sandbox.LockService = {getScriptLock:() => ({
+    tryLock:() => true, releaseLock:() => {released = true;}
+  })};
+  sandbox.PropertiesService = {getScriptProperties:() => ({
+    getProperty:(key) => ({
+      CLOUDFLARE_PAGES_URL:'https://example.test',
+      D1_SYNC_TOKEN:'test-secret'
+    })[key]
+  })};
+  sandbox.UrlFetchApp = {fetch(url, request) {
+    assert.equal(url, 'https://example.test/api/v3/admin/sync');
+    posts.push(request.payload);
+    const written = posts.length === 1 ? 20 : 0;
+    return {getResponseCode:() => 200, getContentText:() => JSON.stringify({
+      ok:true, table:'questions_v3', upserted:20, written, unchanged:20-written
+    })};
+  }};
+  sandbox.previewMultiSourceV3Pilot20();
+  assert.equal(posts.length, 0);
+  assert.equal(messages[0].eligible, 20);
+  sandbox.syncMultiSourceV3Pilot20();
+  assert.equal(posts.length, 2);
+  assert.equal(posts[0], posts[1]);
+  assert.equal(JSON.parse(posts[0]).questions.length, 20);
+  assert.deepEqual(messages[2], {attempt:2, upserted:20, written:0, unchanged:20});
+  assert.equal(released, true);
+  rows[19] = rows[0];
+  assert.throws(() => sandbox.syncMultiSourceV3Pilot20(), /重複ID/);
+  assert.equal(posts.length, 2);
+});
