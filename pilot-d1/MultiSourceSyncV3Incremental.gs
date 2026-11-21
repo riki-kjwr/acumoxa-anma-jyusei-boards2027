@@ -233,3 +233,26 @@ function v3AutoMap_(src,sheet,get) {
   if(!Number.isSafeInteger(q.question_number)||q.question_number<0)q.question_number=null;
   return q;
 }
+
+/** Optional: enable a single hourly sync trigger after the manual pilot passes. */
+function installV3SyncHourlyTrigger() {
+  const handler='syncMultiSourceV3Incremental';
+  const existing=ScriptApp.getProjectTriggers().filter(function(trigger) {
+    return trigger.getHandlerFunction()===handler;
+  });
+  if (existing.length) {
+    Logger.log('V3の定期同期トリガーはすでに設定されています。');
+    return;
+  }
+  ScriptApp.newTrigger(handler).timeBased().everyHours(1).create();
+  Logger.log('V3の定期同期を1時間ごとに設定しました。');
+}
+/** Optional: stop only this sync trigger; leave other triggers untouched. */
+function removeV3SyncHourlyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction()==='syncMultiSourceV3Incremental') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  Logger.log('V3の定期同期トリガーを解除しました。');
+}
