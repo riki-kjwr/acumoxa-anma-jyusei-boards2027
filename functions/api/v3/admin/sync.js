@@ -59,10 +59,34 @@ export async function onRequestPost({ request, env }) {
     option_count=excluded.option_count,
     correct_answer=excluded.correct_answer,
     answer_status=excluded.answer_status,
-    updated_at=CURRENT_TIMESTAMP`;
+    updated_at=CURRENT_TIMESTAMP
+  WHERE questions_v3.source_key = excluded.source_key
+    AND questions_v3.spreadsheet_id = excluded.spreadsheet_id
+    AND questions_v3.sheet_gid = excluded.sheet_gid
+    AND (
+      questions_v3.sheet_name IS NOT excluded.sheet_name OR
+      questions_v3.school IS NOT excluded.school OR
+      questions_v3.exam_type IS NOT excluded.exam_type OR
+      questions_v3.year_label IS NOT excluded.year_label OR
+      questions_v3.round_label IS NOT excluded.round_label OR
+      questions_v3.subject IS NOT excluded.subject OR
+      questions_v3.unit IS NOT excluded.unit OR
+      questions_v3.question_number IS NOT excluded.question_number OR
+      questions_v3.question_text IS NOT excluded.question_text OR
+      questions_v3.option1 IS NOT excluded.option1 OR
+      questions_v3.option2 IS NOT excluded.option2 OR
+      questions_v3.option3 IS NOT excluded.option3 OR
+      questions_v3.option4 IS NOT excluded.option4 OR
+      questions_v3.option5 IS NOT excluded.option5 OR
+      questions_v3.option_count IS NOT excluded.option_count OR
+      questions_v3.correct_answer IS NOT excluded.correct_answer OR
+      questions_v3.answer_status IS NOT excluded.answer_status
+    )`;
 
   const statements = [];
   const counts = {};
+  const seenIds = new Set();
+  const sourceById = [];
   for (const q of incoming.questions) {
     if (!q || typeof q !== "object" || Array.isArray(q)) {
       return reply({ error: "Invalid question object" }, 400);
@@ -97,6 +121,12 @@ export async function onRequestPost({ request, env }) {
       return reply({ error: "Invalid question: " + (id || "(no ID)") }, 400);
     }
 
+    if (seenIds.has(id)) {
+      return reply({ error: "Duplicate ID in batch: " + id }, 409);
+    }
+    seenIds.add(id);
+    sourceById.push({ id, sourceKey, spreadsheetId, sheetGid });
+
     const values = [
       id, sourceKey, spreadsheetId, sheetGid, sheetName,
       text("school"), text("exam_type"), text("year_label"),
@@ -108,11 +138,30 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    await env.DB.batch(statements);
+    // Reject accidental ID reuse across different tabs/sources. Never overwrite
+    // another tab's question, even if an upstream sheet repeats its local ID.
+    const placeholders = sourceById.map(() => "?").join(",");
+    const existing = await env.DB.prepare(
+      "SELECT id, source_key, spreadsheet_id, sheet_gid FROM questions_v3 WHERE id IN (" + placeholders + ")"
+    ).bind(...sourceById.map((q) => q.id)).all();
+    const owners = new Map((existing.results || []).map((q) => [q.id, q]));
+    for (const question of sourceById) {
+      const owner = owners.get(question.id);
+      if (owner && (owner.source_key !== question.sourceKey ||
+        owner.spreadsheet_id !== question.spreadsheetId ||
+        Number(owner.sheet_gid) !== question.sheetGid)) {
+        return reply({ error: "Question ID already belongs to another source/tab", id: question.id }, 409);
+      }
+    }
+
+    const results = await env.DB.batch(statements);
+    const written = results.reduce((sum, item) => sum + (Number(item?.meta?.changes) || 0), 0);
     return reply({
       ok: true,
       table: "questions_v3",
       upserted: statements.length,
+      written,
+      unchanged: statements.length - written,
       by_source: counts
     });
   } catch (error) {
