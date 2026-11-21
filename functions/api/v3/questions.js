@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env }) {
   if ([after, sourceKey, subject].some((value) => value.length > 300)) {
     return reply({ error: "Filter too long" }, 400);
   }
-  const where = ["id > ?"];
+  const where = ["id > ?", "(source_key = 'ONIKI_GRAD' OR (answer_status NOT LIKE '%要照合%' AND answer_status NOT LIKE '%推定%'))"];
   const args = [after];
   if (sourceKey) { where.push("source_key = ?"); args.push(sourceKey); }
   if (subject) { where.push("subject = ?"); args.push(subject); }
