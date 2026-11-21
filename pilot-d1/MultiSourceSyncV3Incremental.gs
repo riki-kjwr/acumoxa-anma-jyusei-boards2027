@@ -4,6 +4,8 @@
  *
  * Functions:
  *   previewMultiSourceV3Auto()      : read-only tab discovery
+ *   previewMultiSourceV3Pilot20()   : read-only validation of the fixed sample
+ *   syncMultiSourceV3Pilot20()      : sends the same 20 questions twice
  *   syncMultiSourceV3Incremental()  : resumes a bounded sweep; rerun to finish
  *
  * Never deletes D1 rows or edits source sheets. A full sweep is triggered only
@@ -39,6 +41,68 @@ function previewMultiSourceV3Auto() {
     });
   });
   Logger.log('プレビューのみ。SpreadsheetとD1への書き込みはありません。');
+}
+
+function v3AutoPilot20_() {
+  const src = D1_V3_AUTO_REGISTRY.find(function(item) {return item.key === 'ONIKI_GRAD';});
+  const sheet = SpreadsheetApp.openById(src.id).getSheetById(0);
+  if (!sheet || sheet.getLastRow() < 21) throw new Error('R7の検証用20問が見つかりません。');
+  const headers = v3AutoHeaders_(sheet);
+  if (!v3AutoIsQuestionTab_(src, headers)) throw new Error('検証用タブの列見出しが一致しません。');
+  const width = Math.max.apply(null, Object.values(headers)) + 1;
+  const questions = sheet.getRange(2, 1, 20, width).getValues().map(function(row) {
+    const get = function(label) {return String(row[headers[label]] ?? '').trim();};
+    return get('問題ID') ? v3AutoMap_(src, sheet, get) : null;
+  });
+  if (questions.some(function(q) {return !q;}) ||
+      new Set(questions.map(function(q) {return q.id;})).size !== 20) {
+    throw new Error('検証範囲の20行に不完全な問題または重複IDがあります。送信を中止します。');
+  }
+  return questions;
+}
+
+function previewMultiSourceV3Pilot20() {
+  const questions = v3AutoPilot20_();
+  Logger.log(JSON.stringify({source:'ONIKI_GRAD', tab:questions[0].sheet_name,
+    gid:questions[0].sheet_gid, firstRow:2, lastRow:21, eligible:questions.length}));
+}
+
+function syncMultiSourceV3Pilot20() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('別のV3同期が実行中です。');
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const url = (props.getProperty('CLOUDFLARE_PAGES_URL') || '').replace(/\/+$/, '');
+    const token = props.getProperty('D1_SYNC_TOKEN');
+    if (!/^https:\/\/[^/?#@]+$/.test(url) || !token) {
+      throw new Error('テスト用PagesのURLと既存の同期トークンを確認してください。');
+    }
+    const questions = v3AutoPilot20_();
+    const payload = JSON.stringify({questions:questions});
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const response = UrlFetchApp.fetch(url + '/api/v3/admin/sync', {
+        method:'post', contentType:'application/json',
+        headers:{Authorization:'Bearer ' + token}, payload:payload,
+        followRedirects:false, muteHttpExceptions:true
+      });
+      if (response.getResponseCode() !== 200) {
+        throw new Error('20問検証の送信' + attempt + '回目: HTTP ' + response.getResponseCode());
+      }
+      const result = JSON.parse(response.getContentText());
+      if (!result.ok || result.table !== 'questions_v3' || result.upserted !== 20 ||
+          !Number.isInteger(result.written) || !Number.isInteger(result.unchanged) ||
+          result.written < 0 || result.unchanged < 0 || result.written + result.unchanged !== 20) {
+        throw new Error('20問検証の応答件数が一致しません。');
+      }
+      Logger.log(JSON.stringify({attempt:attempt, upserted:result.upserted,
+        written:result.written, unchanged:result.unchanged}));
+      if (attempt === 2 && (result.written !== 0 || result.unchanged !== 20)) {
+        throw new Error('同じ20問の再送でD1のデータが変更されました。');
+      }
+    }
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function syncMultiSourceV3Incremental() {
