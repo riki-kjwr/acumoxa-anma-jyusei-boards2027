@@ -20,7 +20,8 @@ The first V3 pilot hard-coded a short list of approved tab IDs, excluding e.g. ç
 4. In Apps Script Project Settings â†’ Script properties, verify `CLOUDFLARE_PAGES_URL` and `D1_SYNC_TOKEN`. The latter must match the Cloudflare `SYNC_TOKEN` secret. Rotate leaked values; **never paste or commit any token**.
 5. Run `previewMultiSourceV3Auto` (read-only). Check that the expected question tabs appear as å¯¾è±¡ and that the non-question study tabs are excluded.
 6. Run `syncMultiSourceV3Incremental`. It processes up to 2,000 sheet rows per call, in 100-row chunks, and sends at most 20 eligible questions per API request. Rerun the same function until the log reports all three sources completed. It can resume after an error from the last successfully committed chunk.
-7. In D1 Studio, check:
+7. **Only after the manual pilot succeeds**, you may run `installV3SyncHourlyTrigger` once to resume checks every hour without manual clicks. To stop only this schedule, run `removeV3SyncHourlyTrigger`. The scheduled job skips unchanged Spreadsheet files.
+8. In D1 Studio, check:
 
    ```sql
    SELECT source_key, COUNT(*) AS rows FROM questions_v3 GROUP BY source_key;
@@ -30,7 +31,7 @@ The first V3 pilot hard-coded a short list of approved tab IDs, excluding e.g. ç
      FROM questions_v3 ORDER BY updated_at DESC LIMIT 20;
    ```
 
-8. Inspect the public read-only endpoint `/api/v3/questions?limit=20`. It returns `count`, `next_after`, and `questions`. Pass `next_after` into the following request as `after` for pagination. The live exam app is **not yet** switched to this API.
+9. Inspect the public read-only endpoint `/api/v3/questions?limit=20`. It returns `count`, `next_after`, and `questions`. Pass `next_after` into the following request as `after` for pagination. The live exam app is **not yet** switched to this API.
 
 ## Operational guarantees and limits
 
