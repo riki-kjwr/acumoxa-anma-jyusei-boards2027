@@ -24,4 +24,4 @@ jobs:
       - name: Syntax check the Google Apps Script source
         run: node --check < pilot-d1/MultiSourceSyncV3Incremental.gs
       - name: Test the Cloudflare API against SQLite
-        run: node --test pilot-d1/tests/v3-sync.test.mjs
+        run: node --test pilot-d1/tests/*.test.mjs
