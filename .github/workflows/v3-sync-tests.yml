@@ -1,0 +1,27 @@
+name: V3 sync safety tests
+
+on:
+  pull_request:
+    paths:
+      - 'functions/api/v3/**'
+      - 'pilot-d1/**'
+      - '.github/workflows/v3-sync-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'functions/api/v3/**'
+      - 'pilot-d1/**'
+      - '.github/workflows/v3-sync-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check the Google Apps Script source
+        run: node --check < pilot-d1/MultiSourceSyncV3Incremental.gs
+      - name: Test the Cloudflare API against SQLite
+        run: node --test pilot-d1/tests/v3-sync.test.mjs
