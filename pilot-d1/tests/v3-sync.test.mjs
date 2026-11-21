@@ -90,7 +90,9 @@ test('V3 inserts, no-ops, updates, paginates, and refuses cross-tab ID collision
   assert.equal(response.status, 200);
 
   const get = async (query) => {
-    const request = new Request('https://example.test/api/v3/questions?' + query);
+    const request = new Request('https://example.test/api/v3/questions?' + query, {
+      headers: { Authorization: 'Bearer test-secret' }
+    });
     const res = await onRequestGet({ request, env });
     assert.equal(res.status, 200);
     return json(res);
@@ -104,4 +106,30 @@ test('V3 inserts, no-ops, updates, paginates, and refuses cross-tab ID collision
   assert.equal(second.questions[0].id, 'ONIKI_CLASS::TEST-002');
   const empty = await get('source_key=ONIKI_TERM3');
   assert.equal(empty.count, 0);
+});
+
+test('V3 reads require the configured token before accessing D1', async () => {
+  const url = 'https://example.test/api/v3/questions';
+  const env = { SYNC_TOKEN: 'test-secret' };
+  for (const headers of [{}, { Authorization: 'Bearer wrong' }]) {
+    const response = await onRequestGet({ request: new Request(url, { headers }), env });
+    assert.equal(response.status, 401);
+    assert.deepEqual(await json(response), { error: 'Unauthorized' });
+  }
+  const response = await onRequestGet({ request: new Request(url), env: {} });
+  assert.equal(response.status, 503);
+});
+
+test('replaying a full 20-question batch leaves every row unchanged', async () => {
+  const database = new TestD1();
+  const env = { DB: database, SYNC_TOKEN: 'test-secret' };
+  const questions = Array.from({ length: 20 }, (_, i) => ({ ...base, id: 'PILOT-' + i }));
+  const first = await sender(env, questions);
+  assert.equal(first.status, 200);
+  assert.equal((await json(first)).written, 20);
+  const replay = await sender(env, questions);
+  assert.equal(replay.status, 200);
+  const result = await json(replay);
+  assert.equal(result.written, 0);
+  assert.equal(result.unchanged, 20);
 });
