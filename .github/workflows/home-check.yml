@@ -1,0 +1,25 @@
+name: School home smoke tests
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "oniki.html"
+      - "app-catalog.json"
+      - "tests/home-config.test.mjs"
+      - ".github/workflows/home-check.yml"
+  push:
+    paths:
+      - "index.html"
+      - "oniki.html"
+      - "app-catalog.json"
+      - "tests/home-config.test.mjs"
+      - ".github/workflows/home-check.yml"
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/home-config.test.mjs
