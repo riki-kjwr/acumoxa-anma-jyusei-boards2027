@@ -22,7 +22,7 @@ main{max-width:480px;margin:12vh auto;padding:24px}
 input,button{font:inherit;padding:10px;margin:8px 0;display:block}
 input{box-sizing:border-box;width:100%}
 </style>
-<main><h1>卒試過去問</h1><p>R7一次午前の最初の20問をD1から読み込みます。</p>
+<main><h1>卒試過去問</h1><p>卒試の問題文・選択肢・正答をD1から読み込みます。</p>
 <form method="post"><label for="code">試験版アクセスコード</label>
 <input id="code" name="code" type="password" required pattern="[a-f0-9]{32}" autocomplete="off">
 <button>卒試アプリを開く</button></form><a href="/">公開版に戻る</a></main></html>`);
@@ -47,7 +47,10 @@ export async function onRequestPost({ request, env }) {
   try {
     const asset = await env.ASSETS.fetch(new URL("/", request.url));
     if (!asset.ok) throw new Error("App asset unavailable");
-    const { questions } = await pilot.json();
+    const { results: questions } = await env.DB.prepare(
+      "SELECT id, question_text, option1, option2, option3, option4, correct_answer " +
+      "FROM questions_v3 WHERE source_key = ? AND option_count = 4"
+    ).bind("ONIKI_GRAD").all();
     return html(renderPreview(await asset.text(), questions));
   } catch (error) {
     console.error("Graduation preview could not load", error.message);
@@ -68,14 +71,16 @@ export function renderPreview(portal, questions) {
   let count = 0;
   const bank = JSON.parse(bankJson).map((question) => {
     const updated = byId.get(question.id);
-    if (!updated) return question;
+    if (!updated) throw new Error("Missing D1 question: " + question.id);
     count++;
     const opts = [updated.option1, updated.option2, updated.option3, updated.option4];
     if (!updated.question_text || opts.some((choice) => !choice) ||
         ![1, 2, 3, 4].includes(updated.correct_answer)) throw new Error("Invalid D1 question");
     return { ...question, text: updated.question_text, opts, correct: updated.correct_answer };
   });
-  if (count !== 20 || byId.size !== 20) throw new Error("D1 sample does not match the app");
+  if (!count || count !== new Set(bank.map((question) => question.id)).size) {
+    throw new Error("Invalid graduation bank IDs");
+  }
 
   const serialized = JSON.stringify(bank).replaceAll("<", "\\u003c");
   return original.replace(bankPattern, () => "const BANK = " + serialized + ";\nwindow.QUESTIONS = BANK;")
