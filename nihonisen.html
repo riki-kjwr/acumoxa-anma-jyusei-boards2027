@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>日本医専｜国家試験2027対策アプリ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font: 16px/1.55 system-ui, sans-serif;
+      color: #18253a;
+      background: #f3f6fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 45rem; margin: auto; padding: clamp(1rem, 4vw, 2rem); }
+    header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+    h1 { margin: 0; font-size: clamp(1.2rem, 4.5vw, 1.6rem); }
+    header p { margin: .2rem 0 0; color: #42546c; }
+    a { color: #174783; }
+    .status { color: #42546c; margin: 1.25rem 0 .75rem; }
+    details { margin: .65rem 0; border: 1px solid #d7e1ee; border-radius: .75rem; background: white; }
+    summary { cursor: pointer; padding: .85rem 1rem; font-weight: 700; }
+    details[open] > summary { border-bottom: 1px solid #e5ebf3; }
+    .options { padding: .85rem 1rem 1rem; }
+    .options p { margin: 0; color: #42546c; }
+    fieldset { margin: 0 0 .85rem; padding: 0; border: 0; min-inline-size: 0; }
+    legend { padding: 0; margin-bottom: .35rem; font-weight: 600; }
+    .choices { display: flex; flex-wrap: wrap; gap: .35rem .65rem; }
+    .choices label { display: inline-flex; align-items: center; gap: .35rem; min-height: 44px; padding: 0 .55rem; border: 1px solid #d7e1ee; border-radius: .45rem; cursor: pointer; }
+    .choices label:has(input:checked) { border-color: #4271a9; background: #edf4ff; }
+    input { margin: 0; accent-color: #174783; }
+    :focus-visible { outline: 3px solid #174783; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>国家試験2027対策アプリ</h1>
+        <p>日本医専｜柔整師用</p>
+      </div>
+      <a href="./">共通ホームへ</a>
+    </header>
+
+    <p class="status">試作版では問題集を選ぶ画面を確認できます。</p>
+
+    <details id="grad" name="question-bank" open>
+      <summary>卒試・実力試験</summary>
+      <div class="options">
+        <fieldset>
+          <legend>試験の種類</legend>
+          <div class="choices">
+            <label><input type="checkbox" name="exam" value="achievement" checked>効果測定</label>
+            <label><input type="checkbox" name="exam" value="proficiency" checked>実力試験</label>
+            <label><input type="checkbox" name="exam" value="graduation" checked>卒業試験</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>学年</legend>
+          <div class="choices">
+            <label><input type="checkbox" name="grade" value="1" checked>1年</label>
+            <label><input type="checkbox" name="grade" value="2" checked>2年</label>
+            <label><input type="checkbox" name="grade" value="3" checked>3年</label>
+          </div>
+        </fieldset>
+        <p>問題データは接続準備中です。</p>
+      </div>
+    </details>
+
+    <details id="term" name="question-bank">
+      <summary>期末過去問</summary>
+      <div class="options"><p>収録準備中です。</p></div>
+    </details>
+
+    <details id="class" name="question-bank">
+      <summary>授業プリント問題集</summary>
+      <div class="options"><p>収録準備中です。</p></div>
+    </details>
+
+    <details id="national" name="question-bank">
+      <summary>柔整国試過去問</summary>
+      <div class="options"><p>収録準備中です。</p></div>
+    </details>
+  </main>
+</body>
+</html>
