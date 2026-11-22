@@ -152,13 +152,17 @@ window.addEventListener('message', (event) => {
 
 export function resolveEdit(base, edit, legacyBaseline) {
   const snapshot = edit?.sheetBase ?? legacyBaseline;
-  if (!edit || !snapshot || !Array.isArray(snapshot.opts) || snapshot.opts.length !== 4) return base;
-  // Apply the personal field only while its shared baseline is current.
+  if (!edit) return base;
+  if (!snapshot || !Array.isArray(snapshot.opts) || snapshot.opts.length !== 4) {
+    // Older records without a baseline only have the complete saved question.
+    return { ...base, text: edit.text, opts: edit.opts, correct: edit.correct };
+  }
+  // The saved baseline identifies which fields the user edited.
   return {
     ...base,
-    text: snapshot.text === base.text ? edit.text : base.text,
-    opts: base.opts.map((choice, i) => snapshot.opts[i] === choice ? edit.opts[i] : choice),
-    correct: snapshot.correct === base.correct ? edit.correct : base.correct
+    text: edit.text !== snapshot.text ? edit.text : base.text,
+    opts: base.opts.map((choice, i) => edit.opts[i] !== snapshot.opts[i] ? edit.opts[i] : choice),
+    correct: edit.correct !== snapshot.correct ? edit.correct : base.correct
   };
 }
 
