@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "schools": [
+    {
+      "id": "oniki",
+      "title": "鬼木学園",
+      "subtitle": "あはき",
+      "description": "鍼灸・あん摩マッサージ指圧の問題集",
+      "categories": [
+        {
+          "id": "grad",
+          "title": "卒試過去問",
+          "description": "年度・一次／二次・午前／午後・教科",
+          "href": "./oniki.html#app=grad"
+        },
+        {
+          "id": "term",
+          "title": "期末過去問",
+          "description": "年度・学期・教科",
+          "href": "./oniki.html#app=term"
+        },
+        {
+          "id": "class",
+          "title": "授業プリント問題集",
+          "description": "教科・問題数・順番・詳細設定",
+          "href": "./oniki.html#app=class"
+        },
+        {
+          "id": "national",
+          "title": "国試過去問",
+          "description": "準備中（現行アプリでは0問）",
+          "href": "./oniki.html#app=national"
+        }
+      ]
+    },
+    {
+      "id": "nihon-isen",
+      "title": "日本医専",
+      "subtitle": "柔整",
+      "description": "完成版の柔整画面を受け取り次第接続します",
+      "status": "pending",
+      "categories": []
+    }
+  ]
+}
