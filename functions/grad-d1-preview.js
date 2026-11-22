@@ -69,7 +69,8 @@ export function renderPreview(portal, questions) {
 
   const byId = new Map(questions.map((question) => [question.id, question]));
   let count = 0;
-  const bank = JSON.parse(bankJson).map((question) => {
+  const originalBank = JSON.parse(bankJson);
+  const bank = originalBank.map((question) => {
     const updated = byId.get(question.id);
     if (!updated) throw new Error("Missing D1 question: " + question.id);
     count++;
@@ -82,11 +83,43 @@ export function renderPreview(portal, questions) {
     throw new Error("Invalid graduation bank IDs");
   }
 
-  const serialized = JSON.stringify(bank).replaceAll("<", "\\u003c");
-  return original.replace(bankPattern, () => "const BANK = " + serialized + ";\nwindow.QUESTIONS = BANK;")
+  const serialize = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
+  const legacyBaseline = originalBank.map(({ id, text, opts, correct }) => [id, { text, opts, correct }]);
+  const applyPattern = /function applyEdits\(edits = \{\}\)\{[\s\S]*?\n\}(?=\nfunction answerKey)/;
+  const saveAnchor = "const edits={...db.edits};";
+  const editedQuestion = "byId[q.id]={...base,...edit};";
+  if (!applyPattern.test(original) || !original.includes(saveAnchor) || !original.includes(editedQuestion)) {
+    throw new Error("Graduation edit hooks not found");
+  }
+  return original.replace(bankPattern, () => "const BANK = " + serialize(bank) + ";\nwindow.QUESTIONS = BANK;" +
+      "\nwindow.onikiLegacyEditBaseline = new Map(" + serialize(legacyBaseline) + ");" +
+      "\nwindow.onikiResolveEdit = " + resolveEdit.toString() + ";")
+    .replace(applyPattern, () => `function applyEdits(edits = {}){
+ for(const [i,q] of DATA.entries()){
+  const base = originalQuestions.get(q.id);
+  const edit = Object.hasOwn(edits,q.id) ? edits[q.id] : null;
+  DATA[i] = window.onikiResolveEdit(base, edit, window.onikiLegacyEditBaseline.get(q.id));
+ }
+}`)
+    .replace(saveAnchor, () => `edit.sheetBase = {text:base.text, opts:[...base.opts], correct:base.correct};
+ const edits={...db.edits};`)
+    .replace(editedQuestion, () => "byId[q.id]={...base,text:edit.text,opts:edit.opts,correct:edit.correct};")
     .replace("</body>", `<script>
 window.addEventListener('message', (event) => {
   if (event.source === window && event.data?.type === 'fourway-home') location.assign('/');
 });
 </script></body>`);
+}
+
+
+export function resolveEdit(base, edit, legacyBaseline) {
+  const snapshot = edit?.sheetBase ?? legacyBaseline;
+  if (!edit || !snapshot || !Array.isArray(snapshot.opts) || snapshot.opts.length !== 4) return base;
+  // Apply the personal field only while its shared baseline is current.
+  return {
+    ...base,
+    text: snapshot.text === base.text ? edit.text : base.text,
+    opts: base.opts.map((choice, i) => snapshot.opts[i] === choice ? edit.opts[i] : choice),
+    correct: snapshot.correct === base.correct ? edit.correct : base.correct
+  };
 }
