@@ -88,7 +88,7 @@ export function renderPreview(portal, questions, key = "grad") {
   let count = 0;
   const originalBank = JSON.parse(bankJson);
   const bank = originalBank.map((question) => {
-    const updated = byId.get(config.prefix + question.id);
+    const updated = byId.get(config.prefix + (key === "term" ? question.id.replace(/^TERM-/, "") : question.id));
     if (!updated) {
       if (key === "grad") throw new Error("Missing D1 question: " + question.id);
       return question;
