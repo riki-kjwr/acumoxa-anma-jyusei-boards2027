@@ -62,9 +62,9 @@ export async function onRequestPost({ request, env }) {
     const asset = await env.ASSETS.fetch(new URL("/", request.url));
     if (!asset.ok) throw new Error("App asset unavailable");
     const { results: questions } = await env.DB.prepare(
-      "SELECT id, question_text, option1, option2, option3, option4, correct_answer " +
+      "SELECT id, sheet_name, exam_type, year_label, round_label, subject, question_number, question_text, option1, option2, option3, option4, correct_answer " +
       "FROM questions_v3 WHERE source_key = ? AND option_count = 4 " +
-      "AND (source_key = 'ONIKI_GRAD' OR (answer_status NOT LIKE '%要照合%' AND answer_status NOT LIKE '%推定%'))"
+      "AND (source_key = 'ONIKI_GRAD' OR (answer_status NOT LIKE '%要照合%' AND answer_status NOT LIKE '%推定%')) ORDER BY id"
     ).bind(bank.source).all();
     return html(renderPreview(await asset.text(), questions, key));
   } catch (error) {
@@ -87,6 +87,9 @@ export function renderPreview(portal, questions, key = "grad") {
   const byId = new Map(questions.map((question) => [question.id, question]));
   let count = 0;
   const originalBank = JSON.parse(bankJson);
+  const matched = new Set();
+  const groups = catalog ? JSON.parse(catalog.trim().slice("window.ONIKI_WORKSHEET_CATALOG".length).replace(/^\s*=\s*/, "").replace(/;$/, "")) : [];
+  const grouped = new Map(groups.map((group) => [group.key, group]));
   const bank = originalBank.map((question) => {
     const updated = byId.get(config.prefix + (key === "term" ? question.id.replace(/^TERM-/, "") : question.id));
     if (!updated) {
@@ -94,11 +97,20 @@ export function renderPreview(portal, questions, key = "grad") {
       return question;
     }
     count++;
+    matched.add(updated.id);
     const opts = [updated.option1, updated.option2, updated.option3, updated.option4];
     if (!updated.question_text || opts.some((choice) => !choice) ||
         ![1, 2, 3, 4].includes(updated.correct_answer)) throw new Error("Invalid D1 question");
     return { ...question, text: updated.question_text, opts, correct: updated.correct_answer };
   });
+  for (const row of questions) {
+    if (matched.has(row.id)) continue;
+    const question = toNewQuestion(row, key, config.prefix, grouped);
+    if (question) {
+      bank.push(question);
+      count++;
+    }
+  }
   if (!count || bank.length !== new Set(bank.map((question) => question.id)).size) {
     throw new Error("Invalid graduation bank IDs");
   }
@@ -111,9 +123,13 @@ export function renderPreview(portal, questions, key = "grad") {
   if (!applyPattern.test(original) || !original.includes(saveAnchor) || !original.includes(editedQuestion)) {
     throw new Error("Graduation edit hooks not found");
   }
-  return original.replace(bankPattern, () => "const BANK = " + serialize(bank) + ";" + catalog + "\nwindow.QUESTIONS = BANK;" +
+  return original.replace(bankPattern, () => "const BANK = " + serialize(bank) + ";" + (catalog ? "\nwindow.ONIKI_WORKSHEET_CATALOG = " + serialize([...grouped.values()]) + ";" : "") + "\nwindow.QUESTIONS = BANK;" +
       "\nwindow.onikiLegacyEditBaseline = new Map(" + serialize(legacyBaseline) + ");" +
       "\nwindow.onikiResolveEdit = " + resolveEdit.toString() + ";")
+    .replace(/years:\[("[^"\r\n]+"(?:,"[^"\r\n]+")*)\]/g,
+      (all, years) => key === "class" ? all : "years:[...new Set([" + years + ",...DATA.map(q=>q.year)])]")
+    .replace(/years:new Set\(\[("[^"\r\n]+"(?:,"[^"\r\n]+")*)\]\)/g,
+      (all, years) => key === "class" ? all : "years:new Set([" + years + ",...DATA.map(q=>q.year).filter(year=>year!=='R5追加')])")
     .replace(applyPattern, () => `function applyEdits(edits = {}){
  for(const [i,q] of DATA.entries()){
   const base = originalQuestions.get(q.id);
@@ -144,4 +160,51 @@ export function resolveEdit(base, edit, legacyBaseline) {
     opts: base.opts.map((choice, i) => snapshot.opts[i] === choice ? edit.opts[i] : choice),
     correct: snapshot.correct === base.correct ? edit.correct : base.correct
   };
+}
+
+
+function toNewQuestion(row, key, prefix, groups) {
+  if (!row.id.startsWith(prefix)) return null;
+  const rawId = row.id.slice(prefix.length);
+  const opts = [row.option1, row.option2, row.option3, row.option4];
+  if (!rawId || !row.question_text || opts.some((option) => !option) ||
+      ![1, 2, 3, 4].includes(row.correct_answer)) return null;
+  const subject = row.subject || "";
+  const yearMatch = (row.year_label || "").normalize("NFKC").match(/(?:R|令和)\s*0?(\d+)/i);
+  const year = yearMatch ? "R" + yearMatch[1] : "";
+  const round = (row.round_label || "").normalize("NFKC");
+  const question = { id: rawId, subject, num: row.question_number,
+    text: row.question_text, opts, correct: row.correct_answer };
+
+  if (key === "grad") {
+    const exam = (row.exam_type || "").normalize("NFKC");
+    const stage = /[2二]次/.test(exam) ? "二次" : /[1一]次/.test(exam) ? "一次" : "";
+    const period = round.match(/午[前後]/)?.[0];
+    const gradYear = /追加/.test(row.sheet_name || "") ? "R5追加" : year;
+    return gradYear && stage && period && subject ? { ...question, year: gradYear, stage, period } : null;
+  }
+
+  const tab = row.sheet_name || "";
+  const labels = [
+    [/^解剖/, "解剖"], [/^生理/, "生理"], [/^(経穴|経絡経穴)/, "経穴"],
+    [/^(東臨|東洋医学臨床)/, key === "term" ? "東洋医学臨床論" : "東臨"],
+    [/^(臨各1|.*林先生)/, "臨各1"], [/^(臨各2|.*西野先生)/, "臨各2"]
+  ];
+  const label = labels.find(([pattern]) => pattern.test(tab.normalize("NFKC")))?.[1];
+  if (!label) return null;
+  if (key === "term") {
+    const term = round.match(/^[12]/)?.[0];
+    return year && term ? { ...question, id: "TERM-" + rawId, subject: label,
+      year, stage: term + "学期", period: "期末" } : null;
+  }
+
+  const stage = round || "問題集";
+  const kind = /小テスト|確認テスト/.test(stage) ? "小テスト" : "問題集";
+  const existing = [...groups.values()].find((group) => group.subject === label &&
+    group.kind === kind && (group.label === stage || group.original === stage));
+  const fileKey = existing?.key ?? JSON.stringify([label, kind, stage]);
+  if (!existing) groups.set(fileKey, { key: fileKey, subject: label, kind,
+    label: stage, original: stage });
+  return { ...question, subject: label, year: kind, stage, kind, period: "授業プリント",
+    fileKey, sourceFile: stage, originalFile: stage };
 }
